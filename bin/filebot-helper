@@ -1,0 +1,72 @@
+#!/usr/bin/env ruby
+require 'logger'
+require 'terrapin'
+require 'pry'
+require 'optparse'
+require 'pp'
+
+$LOG = Logger.new(STDOUT)
+$LOG.level = Logger::INFO
+
+options = {
+  path: '/Volumes/estore1/Media Drive/Torrents/Completed',
+  output: '/Volumes/estore1/Media Drive/Sorted',
+  log: 'amc.log'
+}
+OptionParser.new do |opts|
+  opts.banner = "Usage: filebot-helper [options]"
+
+  opts.on('--path [PATH]', "Path to look for completed torrents under. Default: #{options[:path]}") do |v|
+    options[:path] = v
+  end
+
+  opts.on('--output [OUTPUT]', "Output path to place sorted torrents into. Default: #{options[:path]}") do |v|
+    options[:output] = v
+  end
+
+  opts.on('--log-file [LOGFILE]', "Log file name. Default: #{options[:log]}") do |v|
+    options[:log] = v
+  end
+
+  opts.on('--debug', "Turn on debug messages. Default: off") do |v|
+    $LOG.level = Logger::DEBUG
+  end
+end.parse!
+
+options[:log] = File.join(options[:path], options[:log])
+
+$LOG.info("Scanning: #{options[:path]}")
+torrents = []
+Dir.chdir(options[:path]) do
+  torrents = Dir.glob('*').select {|f| File.directory? f}
+end
+$LOG.debug("Found: #{torrents.join(', ')}")
+
+Terrapin::CommandLine.logger = $LOG
+filebot_command = Terrapin::CommandLine.new(
+  'filebot',
+  '-script fn:amc ' +
+  "--output :output " +
+  '--action duplicate ' +
+  '--conflict skip ' +
+  '-non-strict ' +
+  "--log-file :log " +
+  '--def ' +
+  'unsorted=y ' +
+  'music=y ' +
+  'artwork=y ' +
+  'excludeList=".excludes" ' +
+  "ut_dir=:torrent " +
+  'ut_kind=multi ' +
+  "ut_title=:t " +
+  'ut_label="N/A"'
+)
+
+torrents.each do |t|
+  $LOG.info("Processing: #{t}")
+  options[:t] = t
+  options[:torrent] = File.join(options[:path], t)
+  $LOG.debug filebot_command.run(options)
+end
+
+$LOG.info "Done"
